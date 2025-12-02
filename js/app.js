@@ -1,3 +1,5 @@
+
+
 // --- STATE MANAGEMENT ---
 let customSizeTimeout = null;
 let searchTimeout = null;
@@ -9,7 +11,21 @@ const state = {
     selectedCategory: null,
     currentProduct: null,
     authModalOpen: false,
+    authMode: 'login', // 'login' | 'register'
+    adminAuthMode: 'login', // 'login' | 'register'
     searchQuery: "",
+
+    // New Views
+    view: 'home', // 'home', 'tracking', 'admin', 'adminLogin'
+
+    // Admin State
+    isAdminLoggedIn: false,
+    adminUser: null, // Full admin object
+    adminOrders: [],
+
+    // Checkout State
+    checkoutModalOpen: false,
+    lastOrder: null,
 
     // UI State
     activeDropdown: null,
@@ -19,7 +35,6 @@ const state = {
     activeSubFilter: null,
     categoryModalOpen: false,
     categoryModalData: null,
-    sizeConverterOpen: false,
 
     // Product Details Local State
     details: {
@@ -30,30 +45,51 @@ const state = {
         customLength: '72',
         customWidth: '30',
         zoom: false,
-        currentPrice: 0
+        currentPrice: 0,
+        currentImage: null
     }
 };
 
 // --- INITIALIZATION ---
 function initApp() {
-    // 1. Load Cart from LocalStorage
+    // 1. Load Cart
     const savedCart = localStorage.getItem('sleepSoundCart');
     if (savedCart) {
-        try {
-            state.cart = JSON.parse(savedCart);
-        } catch (e) {
-            console.error("Failed to parse cart", e);
-            state.cart = [];
-        }
+        try { state.cart = JSON.parse(savedCart); } catch (e) { state.cart = []; }
     }
 
-    // 2. Initial Render
+    // 2. Load Orders (for Admin/Tracking)
+    const savedOrders = localStorage.getItem('sleepSoundOrders');
+    if (savedOrders) {
+        try { state.adminOrders = JSON.parse(savedOrders); } catch (e) { state.adminOrders = []; }
+    }
+
+    // 3. Initialize Users
+    if (!localStorage.getItem('sleepSoundUsers')) {
+        localStorage.setItem('sleepSoundUsers', JSON.stringify([]));
+    }
+
+    // 4. Initialize Admins (Default Main Admin)
+    if (!localStorage.getItem('sleepSoundAdmins')) {
+        localStorage.setItem('sleepSoundAdmins', JSON.stringify([
+            { id: 1, username: 'admin', password: 'sleep123', role: 'super', status: 'approved', isMain: true }
+        ]));
+    }
+
+    // 5. Initial Render
     render();
 }
 
-// Helper to persist cart
 function saveCart() {
     localStorage.setItem('sleepSoundCart', JSON.stringify(state.cart));
+}
+
+function saveOrders() {
+    localStorage.setItem('sleepSoundOrders', JSON.stringify(state.adminOrders));
+}
+
+function saveProducts() {
+    localStorage.setItem('sleepSoundProducts', JSON.stringify(PRODUCTS));
 }
 
 // Debounced update for custom size inputs
@@ -61,9 +97,7 @@ function updateCustomSize(key, value) {
     if (customSizeTimeout) {
         clearTimeout(customSizeTimeout);
     }
-    // Update state immediately for inputs
     state.details[key] = value;
-    // Debounce the price calculation and render
     customSizeTimeout = setTimeout(() => {
         app.calculatePrice();
         render();
@@ -80,7 +114,8 @@ const app = {
         state.currentProduct = null;
         state.sidebarOpen = false;
         state.activeSubFilter = null;
-        state.searchQuery = ""; // Clear search on home click
+        state.searchQuery = "";
+        state.view = 'home';
         window.scrollTo({ top: 0, behavior: 'smooth' });
         render();
     },
@@ -96,7 +131,8 @@ const app = {
             state.sidebarOpen = false;
             state.activeSubFilter = null;
             state.categoryModalOpen = false;
-            state.searchQuery = ""; // Reset search when picking category
+            state.searchQuery = "";
+            state.view = 'home';
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
         render();
@@ -116,12 +152,13 @@ const app = {
         state.sidebarOpen = false;
         state.activeSubFilter = null;
         state.searchQuery = "";
+        state.view = 'home';
         window.scrollTo({ top: 0, behavior: 'smooth' });
         render();
     },
     selectProduct: (product) => {
         state.currentProduct = product;
-        // Reset details state
+        state.view = 'home';
         state.details = {
             size: 'Single',
             measurement: 'Inches',
@@ -130,24 +167,130 @@ const app = {
             customLength: '72',
             customWidth: '30',
             zoom: false,
-            currentPrice: product.price
+            currentPrice: product.price,
+            currentImage: product.image
         };
         window.scrollTo({ top: 0, behavior: 'smooth' });
         render();
     },
 
+    // View Switching
+    goToTracking: () => {
+        state.view = 'tracking';
+        state.currentProduct = null;
+        state.selectedCategory = null;
+        state.mobileMenuOpen = false;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        render();
+    },
+    trackOrder: () => {
+        const id = document.getElementById('trackInput').value.trim();
+        if (!id) return alert('Please enter an Order ID');
+
+        const order = state.adminOrders.find(o => o.id === id);
+        const resultDiv = document.getElementById('trackResult');
+
+        if (order) {
+            const steps = ['Order Placed', 'Packed', 'Out for Delivery', 'Delivered'];
+            const stepIdx = steps.indexOf(order.status);
+
+            resultDiv.innerHTML = `
+                <div class='mt-8 text-left border-t border-gray-100 pt-8 animate-fade-in'>
+                    <div class='flex flex-col md:flex-row justify-between items-start mb-8 gap-4'>
+                        <div>
+                            <h3 class='text-xl font-bold text-gray-900'>Order #${order.id}</h3>
+                            <p class='text-sm text-gray-500'>Placed on ${new Date(order.date).toLocaleDateString()}</p>
+                        </div>
+                        <div class='text-left md:text-right'>
+                            <div class='text-lg font-bold text-[#FF6B35]'>₹${order.total.toLocaleString()}</div>
+                            <div class='text-sm text-gray-600'>Branch: ${order.branch}</div>
+                        </div>
+                    </div>
+                    
+                    <div class='relative px-4 md:px-0'>
+                        <div class='absolute left-8 md:left-8 top-0 bottom-0 w-0.5 bg-gray-200'></div>
+                        <div class='space-y-8'>
+                            ${steps.map((step, idx) => {
+                const completed = idx <= stepIdx;
+                const current = idx === stepIdx;
+                return `
+                                    <div class='relative flex items-center gap-6'>
+                                        <div class='w-16 flex justify-center z-10'>
+                                            <div class='w-8 h-8 rounded-full flex items-center justify-center border-2 bg-white ${completed ? 'border-green-500 text-green-500' : 'border-gray-300 text-gray-300'} ${current ? 'ring-4 ring-green-100' : ''}'>
+                                                ${completed ? ICONS.check : `<span class="text-xs font-bold">${idx + 1}</span>`}
+                                            </div>
+                                        </div>
+                                        <div class='${completed ? 'text-gray-900 font-bold' : 'text-gray-400'}'>
+                                            ${step}
+                                            ${current ? '<span class="ml-2 text-xs bg-orange-100 text-[#FF6B35] px-2 py-0.5 rounded-full">Current Status</span>' : ''}
+                                        </div>
+                                    </div>
+                                `;
+            }).join('')}
+                        </div>
+                    </div>
+
+                    <div class='mt-8 bg-gray-50 p-6 rounded-xl border border-gray-100'>
+                        <h4 class='font-bold text-sm text-gray-900 uppercase tracking-wider mb-4'>Order Items</h4>
+                        <div class="space-y-3">
+                            ${order.items.map(i => `
+                                <div class='flex justify-between items-center text-sm'>
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 rounded bg-gray-200 overflow-hidden">
+                                            <img src="${i.image}" class="w-full h-full object-cover">
+                                        </div>
+                                        <div>
+                                            <div class="font-medium text-gray-900">${i.name}</div>
+                                            <div class="text-xs text-gray-500">Qty: ${i.quantity} ${i.selectedDimensions ? `• ${i.selectedDimensions}` : ''}</div>
+                                        </div>
+                                    </div>
+                                    <span class="font-bold text-gray-900">₹${(i.price * i.quantity).toLocaleString()}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `
+                <div class='mt-8 text-center py-8 bg-red-50 rounded-xl border border-red-100 animate-fade-in'>
+                    <div class="text-red-500 font-bold mb-1">Order Not Found</div>
+                    <p class="text-sm text-red-400">Please check the Order ID (e.g., SS-2024-XXXX) and try again.</p>
+                </div>
+            `;
+        }
+    },
+    goToAdmin: () => {
+        if (state.isAdminLoggedIn) {
+            state.view = 'admin';
+        } else {
+            state.view = 'adminLogin';
+        }
+
+        // Admin / login pe jaane se pehle sab background clean karo
+        state.currentProduct = null;
+        state.selectedCategory = null;
+        state.mobileMenuOpen = false;
+        state.isCartOpen = false;
+        state.authModalOpen = false;
+        state.checkoutModalOpen = false;
+        state.categoryModalOpen = false;
+        state.activeDropdown = null;
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        render();
+    },
+
+
     // Search
     handleSearch: (value) => {
         state.searchQuery = value;
-        // Debounce rendering for performance
         if (searchTimeout) clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
-            // If we are on product detail page, go back to list
-            if(state.currentProduct) {
-                state.currentProduct = null;
-            }
+            if (state.currentProduct) state.currentProduct = null;
+            if (state.view !== 'home') state.view = 'home';
             render();
-        }, 150); // 150ms delay
+        }, 150);
     },
 
     // UI Interactions
@@ -155,10 +298,27 @@ const app = {
         state.isCartOpen = isOpen;
         render();
     },
-    toggleAuth: (isOpen) => {
+    toggleAuth: (isOpen, mode = 'login') => {
         state.authModalOpen = isOpen;
+        state.authMode = mode;
+
+        if (isOpen) {
+            // Jab login form open ho, sab background cheeze band karo
+            state.isCartOpen = false;
+            state.mobileMenuOpen = false;
+            state.activeDropdown = null;
+            state.categoryModalOpen = false;
+            state.checkoutModalOpen = false;
+            state.sidebarOpen = false;
+        }
+
         render();
     },
+    toggleAdminAuthMode: (mode) => {
+        state.adminAuthMode = mode;
+        render();
+    },
+
     toggleMobileMenu: () => {
         state.mobileMenuOpen = !state.mobileMenuOpen;
         render();
@@ -187,135 +347,339 @@ const app = {
         state.currentSlide = index;
         render();
     },
-    toggleSizeConverter: (isOpen) => {
-        state.sizeConverterOpen = isOpen;
+    // Removed toggleSizeConverter as requested
+    toggleCheckoutModal: (isOpen) => {
+        state.checkoutModalOpen = isOpen;
+        if (isOpen) state.isCartOpen = false;
         render();
     },
 
-    // Auth
-    login: (e) => {
+    // Auth Actions
+    registerUser: (e) => {
         e.preventDefault();
-        state.user = { id: '1', name: 'Demo User', email: 'demo@example.com' };
+        const name = e.target.name.value;
+        const email = e.target.email.value;
+        const pass = e.target.password.value;
+        const confirm = e.target.confirmPassword.value;
+
+        if (pass !== confirm) return alert("Passwords do not match");
+
+        const users = JSON.parse(localStorage.getItem('sleepSoundUsers'));
+        if (users.find(u => u.email === email)) return alert("Email already registered");
+
+        const newUser = { id: Date.now(), name, email, password: pass };
+        users.push(newUser);
+        localStorage.setItem('sleepSoundUsers', JSON.stringify(users));
+
+        state.user = newUser;
         state.authModalOpen = false;
+        alert("Registration Successful!");
         render();
     },
+
+    login: (e) => {
+        e.preventDefault();
+        const email = e.target.email.value;
+        const pass = e.target.password.value;
+
+        const users = JSON.parse(localStorage.getItem('sleepSoundUsers'));
+        const user = users.find(u => u.email === email && u.password === pass);
+
+        if (user) {
+            state.user = user;
+            state.authModalOpen = false;
+        } else {
+            alert("Invalid Email or Password");
+        }
+        render();
+    },
+
     logout: () => {
         state.user = null;
+        state.isAdminLoggedIn = false;
+        state.adminUser = null;
+        if (state.view === 'admin') state.view = 'home';
         render();
+    },
+
+    // Admin Auth Actions
+    adminLogin: (e) => {
+        e.preventDefault();
+        const username = e.target.username.value;
+        const pass = e.target.password.value;
+        const admins = JSON.parse(localStorage.getItem('sleepSoundAdmins'));
+
+        const admin = admins.find(a => a.username === username && a.password === pass);
+
+        if (!admin) return alert("Invalid credentials");
+        if (admin.status === 'pending') return alert("Account pending approval from Main Admin.");
+        if (admin.status === 'rejected') return alert("Account rejected by Main Admin.");
+
+        state.isAdminLoggedIn = true;
+        state.adminUser = admin;
+        state.view = 'admin';
+        render();
+    },
+
+    registerAdmin: (e) => {
+        e.preventDefault();
+        const username = e.target.username.value;
+        const pass = e.target.password.value;
+        const confirm = e.target.confirmPassword.value;
+
+        if (pass !== confirm) return alert("Passwords do not match");
+
+        const admins = JSON.parse(localStorage.getItem('sleepSoundAdmins'));
+        if (admins.find(a => a.username === username)) return alert("Username already taken");
+
+        admins.push({
+            id: Date.now(),
+            username,
+            password: pass,
+            role: 'admin',
+            status: 'pending' // Requires approval
+        });
+        localStorage.setItem('sleepSoundAdmins', JSON.stringify(admins));
+
+        alert("Admin Request Submitted! Please wait for Main Admin approval.");
+        state.adminAuthMode = 'login';
+        render();
+    },
+
+    // Admin Management Actions
+    approveAdmin: (id) => {
+        const admins = JSON.parse(localStorage.getItem('sleepSoundAdmins'));
+        const adminIndex = admins.findIndex(a => a.id === id);
+        if (adminIndex > -1) {
+            admins[adminIndex].status = 'approved';
+            localStorage.setItem('sleepSoundAdmins', JSON.stringify(admins));
+            render();
+        }
+    },
+
+    rejectAdmin: (id) => {
+        const admins = JSON.parse(localStorage.getItem('sleepSoundAdmins'));
+        const adminIndex = admins.findIndex(a => a.id === id);
+        if (adminIndex > -1) {
+            admins[adminIndex].status = 'rejected';
+            localStorage.setItem('sleepSoundAdmins', JSON.stringify(admins));
+            render();
+        }
+    },
+
+    removeAdmin: (id) => {
+        if (!confirm("Are you sure you want to permanently remove this admin account?")) return;
+        
+        const admins = JSON.parse(localStorage.getItem('sleepSoundAdmins'));
+        const adminToDelete = admins.find(a => a.id === id);
+        
+        if (!adminToDelete) return;
+        
+        // Security check for Main Admin
+        if (adminToDelete.username === 'admin' || adminToDelete.isMain) {
+            alert("Security Alert: The Main Admin account cannot be removed.");
+            return;
+        }
+        
+        const updatedAdmins = admins.filter(a => a.id !== id);
+        localStorage.setItem('sleepSoundAdmins', JSON.stringify(updatedAdmins));
+        
+        // If user deletes themselves (edge case if we allow it)
+        if (state.adminUser && state.adminUser.id === id) {
+            alert("You have removed your own account. Logging out.");
+            app.logout();
+        } else {
+            render(); // Refresh dashboard
+        }
     },
 
     // Cart Logic
-    addToCart: (product, options = {}) => {
-        // Create unique ID based on options to separate variants
-        const variantId = product.id + '-' + JSON.stringify(options);
-        
-        const existing = state.cart.find(item =>
-            item.id === product.id &&
-            JSON.stringify(item.selectedDimensions) === JSON.stringify(options.selectedDimensions)
-        );
-
-        if (existing) {
-            existing.quantity += 1;
-        } else {
-            state.cart.push({ ...product, quantity: 1, ...options });
-        }
-        saveCart(); // Persist
-        state.isCartOpen = true;
-        render();
-    },
-    removeFromCart: (index) => {
-        // Remove by index to be safe with variants
-        state.cart.splice(index, 1);
-        saveCart();
-        render();
-    },
-    updateQuantity: (index, delta) => {
-        const item = state.cart[index];
-        if (item) {
-            item.quantity = Math.max(1, item.quantity + delta);
+        // Cart Logic
+        addToCart: (product, options = {}) => {
+            // ✅ 1. Normalized defaults (card se add ho ya detail se – same logic)
+            const normalized = {
+                selectedSize: options.selectedSize || 'Single',
+                selectedDimensions: options.selectedDimensions || '72x30',
+                selectedHeight: options.selectedHeight || '4',
+                selectedMeasurement: options.selectedMeasurement || 'Inches'
+            };
+    
+            // ✅ 2. Check: cart me already same variant hai kya?
+            const existing = state.cart.find(item => {
+                const itemSize = item.selectedSize || 'Single';
+                const itemDim = item.selectedDimensions || '72x30';
+                const itemHeight = item.selectedHeight || '4';
+                const itemMeasurement = item.selectedMeasurement || 'Inches';
+    
+                return (
+                    item.id === product.id &&
+                    itemSize === normalized.selectedSize &&
+                    itemDim === normalized.selectedDimensions &&
+                    itemHeight === normalized.selectedHeight &&
+                    itemMeasurement === normalized.selectedMeasurement
+                );
+            });
+    
+            if (existing) {
+                // ✅ Same product + same size/dimension/height/measurement → sirf quantity badhao
+                existing.quantity += 1;
+    
+                // Agar detail page se updated price aa raha ho to usko refresh bhi kar sakte ho (optional)
+                if (typeof options.price === 'number') {
+                    existing.price = options.price;
+                }
+            } else {
+                // ✅ Pehli baar add ho raha hai → normalized properties ke saath push karo
+                state.cart.push({
+                    ...product,
+                    quantity: 1,
+                    ...normalized,
+                    ...options   // explicit options (jaise currentPrice) ko override karne do
+                });
+            }
+    
             saveCart();
-        }
-        render();
-    },
+            state.isCartOpen = true;
+            render();
+        },
+    
+        removeFromCart: (index) => {
+            state.cart.splice(index, 1);
+            saveCart();
+            render();
+        },
+    
+        updateQuantity: (index, delta) => {
+            const item = state.cart[index];
+            if (item) {
+                item.quantity = Math.max(1, item.quantity + delta);
+                saveCart();
+            }
+            render();
+        },
+    
+        // Checkout & Orders
+        confirmOrder: (e) => {
+            e.preventDefault();
+            const branch = e.target.branch.value;
+            if (!branch) return alert('Please select a branch');
+    
+            const total = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+            const orderId = `SS-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    
+            const newOrder = {
+                id: orderId,
+                date: new Date().toISOString(),
+                total: total,
+                status: 'Order Placed',
+                branch: branch,
+                items: [...state.cart],
+                customer: state.user || { name: 'Guest', email: 'guest@example.com' }
+            };
+    
+            state.adminOrders.unshift(newOrder); // Add to beginning
+            saveOrders();
+    
+            // Clear Cart
+            state.cart = [];
+            saveCart();
+    
+            // Show success
+            state.checkoutModalOpen = false;
+            state.lastOrder = newOrder;
+    
+            // Show confirmation alert then go to tracking or home
+            setTimeout(() => {
+                alert(`Order Placed Successfully!\nOrder ID: ${orderId}\nPlease save this ID to track your order.`);
+                app.goToTracking();
+            }, 300);
+        },
+    
+        // Admin Actions
+        updateOrderStatus: (orderId, newStatus) => {
+            const order = state.adminOrders.find(o => o.id === orderId);
+            if (order) {
+                order.status = newStatus;
+                saveOrders();
+                render();
+            }
+        },
+    
+        savePrice: (productId, newPrice) => {
+            const prod = PRODUCTS.find(p => p.id === parseInt(productId));
+            if (prod) {
+                prod.price = parseInt(newPrice);
+                prod.displayPrice = "₹" + parseInt(newPrice).toLocaleString();
+                saveProducts();
+                // Force re-render of admin panel to show feedback
+                render();
+            }
+        },
+    
+        // Product Details Logic
+        updateDetail: (key, value) => {
+            state.details[key] = value;
+            app.calculatePrice();
+            render();
+        },
+    
+        calculatePrice: () => {
+            const product = state.currentProduct;
+            if (!product) return;
+    
+            let finalPrice = product.price;
+            const { size, dimensions, measurement, height, customLength, customWidth } = state.details;
+    
+            const sizeMultipliers = { 'Single': 1.0, 'Double': 1.3, 'Queen': 1.5, 'King': 1.8 };
+            finalPrice *= (sizeMultipliers[size] || 1.0);
+    
+            let l, w;
+            if (dimensions === 'custom') {
+                l = parseFloat(customLength) || 72;
+                w = parseFloat(customWidth) || 30;
+            } else {
+                const parts = dimensions.split('x');
+                l = parseFloat(parts[0]) || 72;
+                w = parseFloat(parts[1]) || 30;
+            }
+    
+            if (measurement === 'Centimeter') { l /= 2.54; w /= 2.54; }
+            else if (measurement === 'Feet') { l *= 12; w *= 12; }
+    
+            const baseArea = 72 * 30;
+            const selectedArea = l * w;
+            finalPrice *= (selectedArea / baseArea);
+    
+            const h = parseFloat(height) || 4;
+            finalPrice += (h - 4) * 500;
+    
+            if (dimensions === 'custom') finalPrice += 500;
+    
+            state.details.currentPrice = Math.round(finalPrice);
+        },
+    
+        addToCartCurrent: () => {
+            const { size, dimensions, height, measurement, customLength, customWidth, currentPrice } = state.details;
+            app.addToCart({ ...state.currentProduct, price: currentPrice }, {
+                selectedSize: size,
+                selectedDimensions: dimensions === 'custom' ? `${customLength}x${customWidth}` : dimensions,
+                selectedHeight: height,
+                selectedMeasurement: measurement
+            });
+        },
+    };
 
-    // Product Details Logic
-    updateDetail: (key, value) => {
-        state.details[key] = value;
-        app.calculatePrice();
-        render();
-    },
+    // --- RENDER HELPERS ---
 
-    calculatePrice: () => {
-        const product = state.currentProduct;
-        if (!product) return;
+    function renderHeader() {
+        const cartCount = state.cart.reduce((a, b) => a + b.quantity, 0);
 
-        let finalPrice = product.price;
-        const { size, dimensions, measurement, height, customLength, customWidth } = state.details;
-
-        const sizeMultipliers = {
-            'Single': 1.0, 'Double': 1.3, 'Queen': 1.5, 'King': 1.8
-        };
-        finalPrice *= (sizeMultipliers[size] || 1.0);
-
-        let l, w;
-        if (dimensions === 'custom') {
-            l = parseFloat(customLength) || 72;
-            w = parseFloat(customWidth) || 30;
-        } else {
-            const parts = dimensions.split('x');
-            l = parseFloat(parts[0]) || 72;
-            w = parseFloat(parts[1]) || 30;
-        }
-
-        // Logic to adjust price based on surface area
-        if (measurement === 'Centimeter') {
-            l /= 2.54;
-            w /= 2.54;
-        } else if (measurement === 'Feet') {
-            l *= 12;
-            w *= 12;
-        }
-
-        const baseArea = 72 * 30;
-        const selectedArea = l * w;
-        // Simple linear price scaling for demo
-        finalPrice *= (selectedArea / baseArea);
-
-        // Height adjustment
-        const h = parseFloat(height) || 4;
-        finalPrice += (h - 4) * 500; // 500rs per extra inch
-
-        // Custom cut fee
-        if (dimensions === 'custom') {
-            finalPrice += 500; 
-        }
-
-        state.details.currentPrice = Math.round(finalPrice);
-    },
-
-    addToCartCurrent: () => {
-        const { size, dimensions, height, measurement, customLength, customWidth, currentPrice } = state.details;
-        app.addToCart({ ...state.currentProduct, price: currentPrice }, {
-            selectedSize: size,
-            selectedDimensions: dimensions === 'custom' ? `${customLength}x${customWidth}` : dimensions,
-            selectedHeight: height,
-            selectedMeasurement: measurement
-        });
-    }
-};
-
-// --- RENDER HELPERS ---
-
-function renderHeader() {
-    const cartCount = state.cart.reduce((a, b) => a + b.quantity, 0);
-
-    return `
+return `
     <header class="sticky top-0 z-50 bg-white shadow-sm font-sans">
         <!-- Top Bar -->
         <div class="border-b border-gray-100">
             <div class="max-w-7xl mx-auto px-4 md:px-6">
                 <div class="flex items-center justify-between h-16">
-                    <!-- Modern Minimal Logo -->
                     <div class="flex items-center cursor-pointer group" onclick="app.goHome()">
                         <div class="w-10 h-10 mr-2 group-hover:scale-110 transition-transform duration-300">
                             ${ICONS.logoMoon}
@@ -326,7 +690,6 @@ function renderHeader() {
                         </div>
                     </div>
 
-                    <!-- Search Bar - Desktop -->
                     <div class="hidden md:flex flex-1 max-w-xl mx-8">
                         <div class="relative w-full">
                             <input type="text" 
@@ -340,10 +703,14 @@ function renderHeader() {
                         </div>
                     </div>
 
-                    <!-- Icons / Actions -->
                     <div class="flex items-center space-x-4 md:space-x-6">
-                        <button onclick="app.toggleSizeConverter(true)" class="hidden md:flex items-center text-sm font-medium text-gray-600 hover:text-[#FF6B35] transition-colors">
-                            Size Guide
+                        <button onclick="app.goToTracking()" class="hidden md:flex items-center text-sm font-medium text-gray-600 hover:text-[#FF6B35] transition-colors">
+                            Track Order
+                        </button>
+                        
+                        <!-- Admin Button -->
+                        <button onclick="app.goToAdmin()" class="hidden md:flex items-center text-sm font-medium text-gray-600 hover:text-[#FF6B35] transition-colors gap-1">
+                             ${ICONS.lock} Admin
                         </button>
 
                         ${state.user ? `
@@ -440,7 +807,8 @@ function renderHeader() {
                             </button>
                         </div>
                     `).join('')}
-                    <button onclick="app.toggleSizeConverter(true); app.toggleMobileMenu()" class="block w-full text-left px-4 py-3 text-gray-700 font-medium hover:bg-orange-50 rounded">Size Guide</button>
+                    <button onclick="app.goToTracking(); app.toggleMobileMenu()" class="block w-full text-left px-4 py-3 text-gray-700 font-medium hover:bg-orange-50 rounded">Track Order</button>
+                    <button onclick="app.goToAdmin(); app.toggleMobileMenu()" class="block w-full text-left px-4 py-3 text-gray-700 font-medium hover:bg-orange-50 rounded">Admin Login</button>
                 </nav>
             </div>
         ` : ''}
@@ -511,30 +879,21 @@ function renderProductList() {
     const currentNav = NAV_ITEMS.find(n => n.category === state.selectedCategory);
     const searchLower = state.searchQuery.toLowerCase();
 
-    // Enhanced Filter Logic with Search
     const filteredProducts = PRODUCTS.filter(p => {
-        // 1. Search Filter
         if (searchLower) {
             const matchName = p.name.toLowerCase().includes(searchLower);
             const matchCat = p.category.toLowerCase().includes(searchLower);
             const matchSub = p.subCategory && p.subCategory.toLowerCase().includes(searchLower);
-            
             if (!matchName && !matchCat && !matchSub) return false;
         }
-
-        // 2. Category Filter
         if (state.selectedCategory && p.category !== state.selectedCategory) return false;
-
-        // 3. Sub-Category Filter
         if (state.activeSubFilter && p.subCategory !== state.activeSubFilter) return false;
-
         return true;
     });
 
     return `
     <section id="products" class="bg-gray-50 py-12 md:py-16 min-h-screen">
         <div class="max-w-7xl mx-auto px-4 md:px-6">
-            <!-- Header & Mobile Filter Toggle -->
             <div class="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
                 <div>
                     <h2 class="text-3xl font-bold text-gray-900 mb-2 tracking-tight">
@@ -550,7 +909,6 @@ function renderProductList() {
             </div>
 
             <div class="flex flex-col md:flex-row gap-8">
-                <!-- Sidebar Filters -->
                 ${state.selectedCategory ? `
                     <aside class="md:w-64 flex-shrink-0 ${state.sidebarOpen ? 'block' : 'hidden md:block'} animate-fade-in">
                         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sticky top-24">
@@ -570,7 +928,7 @@ function renderProductList() {
                                                             <div class="w-4 h-4 rounded border flex items-center justify-center transition-colors ${state.activeSubFilter === item ? 'bg-[#FF6B35] border-[#FF6B35]' : 'border-gray-300 group-hover:border-[#FF6B35]'}">
                                                                 ${state.activeSubFilter === item ? ICONS.check : ''}
                                                             </div>
-                                                            <span class="${state.activeSubFilter === item ? 'text-gray-900 font-medium' : 'text-gray-600 group-hover:text-gray-900'}">${item}</span>
+                                                            <span class="text-gray-600 group-hover:text-gray-900">${item}</span>
                                                         </button>
                                                     </li>
                                                 `).join('')}
@@ -583,7 +941,6 @@ function renderProductList() {
                     </aside>
                 ` : ''}
 
-                <!-- Product Grid -->
                 <div class="flex-1">
                     ${filteredProducts.length === 0 ? `
                         <div class="text-center py-24 bg-white rounded-2xl border border-dashed border-gray-200">
@@ -595,14 +952,13 @@ function renderProductList() {
                     ` : `
                         <div class="grid grid-cols-1 sm:grid-cols-2 ${state.selectedCategory ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-6">
                             ${filteredProducts.map(product => {
-                                const discount = product.originalPrice ? Math.round((1 - product.price / parseInt(product.originalPrice.replace(/[₹,]/g, ''))) * 100) : 0;
-                                return `
+        const discount = product.originalPrice ? Math.round((1 - product.price / parseInt(product.originalPrice.replace(/[₹,]/g, ''))) * 100) : 0;
+        return `
                                 <div class="group bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col h-full transform hover:-translate-y-1" onclick="app.selectProduct(PRODUCTS.find(p => p.id === ${product.id}))">
                                     <div class="relative aspect-[4/3] bg-gray-100 overflow-hidden">
                                         <img src="${product.image}" alt="${product.name}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" />
                                         ${product.badge ? `<div class="absolute top-3 left-3 bg-[#FF6B35] text-white px-3 py-1 rounded-full text-xs font-bold z-10 shadow-sm">${product.badge}</div>` : ''}
                                         
-                                        <!-- Quick Action Overlay -->
                                         <div class="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/60 to-transparent translate-y-full group-hover:translate-y-0 transition-transform duration-300 flex justify-center">
                                             <button onclick="event.stopPropagation(); app.addToCart(PRODUCTS.find(p => p.id === ${product.id}))" class="bg-white text-gray-900 font-bold py-2 px-6 rounded-full hover:bg-[#FF6B35] hover:text-white transition-colors shadow-lg text-sm">
                                                 Add to Cart
@@ -623,7 +979,7 @@ function renderProductList() {
                                     </div>
                                 </div>
                                 `;
-                            }).join('')}
+    }).join('')}
                         </div>
                     `}
                 </div>
@@ -636,11 +992,13 @@ function renderProductList() {
 function renderProductDetails() {
     const product = state.currentProduct;
     const details = state.details;
+    const currentImage = details.currentImage || product.image;
     const originalPriceNum = product.originalPrice ? parseInt(product.originalPrice.replace(/[₹,]/g, '')) : 0;
     const currentPrice = details.currentPrice;
     const savings = Math.max(0, (originalPriceNum * (currentPrice / product.price)) - currentPrice);
     const scaledOriginalPrice = originalPriceNum ? Math.round(originalPriceNum * (currentPrice / product.price)) : 0;
     const discount = scaledOriginalPrice ? Math.round((1 - currentPrice / scaledOriginalPrice) * 100) : 0;
+    const galleryImages = product.images && product.images.length > 0 ? product.images : [product.image];
 
     const sizes = ['Single', 'Double', 'Queen', 'King'];
     const measurements = ['Inches', 'Centimeter', 'Feet'];
@@ -659,9 +1017,19 @@ function renderProductDetails() {
                 <div class="relative">
                     <div class="sticky top-24">
                         <div class="relative aspect-square bg-gray-100 rounded-3xl overflow-hidden mb-4 cursor-zoom-in group shadow-sm border border-gray-100" onclick="app.updateDetail('zoom', true)">
-                            <img src="${product.image}" alt="${product.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                            <img src="${currentImage}" alt="${product.name}" class="w-full h-full object-cover transition-transform duration-700" />
                             ${product.badge ? `<div class="absolute top-6 left-6 bg-[#FF6B35] text-white px-4 py-2 rounded-full text-sm font-bold shadow-md">${product.badge}</div>` : ''}
                             <div class="absolute bottom-6 right-6 bg-white/90 backdrop-blur px-3 py-1.5 rounded-full text-xs font-bold text-gray-700 shadow-sm pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">Click to Zoom</div>
+                        </div>
+
+                        <!-- Gallery Thumbnails -->
+                        <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                            ${galleryImages.map(img => `
+                                <button onclick="app.updateDetail('currentImage', '${img}')" class="relative w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden border-2 transition-all ${currentImage === img ? 'border-[#FF6B35] ring-2 ring-[#FF6B35]/20' : 'border-transparent hover:border-gray-300'}">
+                                    <img src="${img}" class="w-full h-full object-cover" />
+                                    ${currentImage === img ? `<div class="absolute inset-0 bg-white/10"></div>` : ''}
+                                </button>
+                            `).join('')}
                         </div>
                     </div>
                 </div>
@@ -671,7 +1039,6 @@ function renderProductDetails() {
                     <div class="text-sm text-[#FF6B35] font-bold tracking-widest uppercase mb-2">${product.category} • ${product.subCategory || 'General'}</div>
                     <h1 class="text-3xl md:text-5xl font-bold text-gray-900 mb-4 tracking-tight leading-tight">${product.name}</h1>
                     
-                    <!-- Pricing Block -->
                     <div class="mb-8 p-6 bg-gray-50 rounded-2xl border border-gray-100">
                         <div class="flex items-end gap-4 mb-2">
                             <span class="text-4xl font-bold text-gray-900">₹${currentPrice.toLocaleString()}</span>
@@ -685,7 +1052,6 @@ function renderProductDetails() {
                     </div>
 
                     <div class="space-y-8">
-                        <!-- Size -->
                         <div>
                             <h3 class="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider flex justify-between">
                                 1. Choose Size Category
@@ -697,7 +1063,6 @@ function renderProductDetails() {
                             </div>
                         </div>
 
-                        <!-- Dimensions -->
                         <div>
                             <div class="flex justify-between items-center mb-3">
                                 <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">2. Dimensions</h3>
@@ -727,14 +1092,9 @@ function renderProductDetails() {
                                         <input type="number" value="${details.customWidth}" oninput="updateCustomSize('customWidth', this.value)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-[#FF6B35] focus:ring-1 focus:ring-[#FF6B35] outline-none bg-white font-bold text-gray-900" />
                                     </div>
                                 </div>
-                                <p class="text-xs text-orange-600 mt-2 flex items-center gap-1">
-                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
-                                    Custom sizes take 2-3 extra days for delivery.
-                                </p>
                             ` : ''}
                         </div>
 
-                        <!-- Height -->
                         <div>
                             <h3 class="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">3. Thickness (Height)</h3>
                             <div class="flex flex-wrap gap-3">
@@ -747,7 +1107,6 @@ function renderProductDetails() {
                         </div>
                     </div>
 
-                    <!-- Action Buttons -->
                     <div class="mt-10 pt-8 border-t border-gray-100 flex gap-4 sticky bottom-0 bg-white/95 backdrop-blur py-4 md:static md:bg-transparent md:py-0 z-20">
                         <button onclick="app.addToCartCurrent()" class="flex-1 bg-[#FF6B35] text-white py-4 rounded-xl font-bold text-lg hover:bg-[#e55a2b] transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]">
                             Add to Cart - ₹${currentPrice.toLocaleString()}
@@ -757,7 +1116,6 @@ function renderProductDetails() {
                         </button>
                     </div>
 
-                    <!-- Features Grid -->
                     <div class="mt-8 grid grid-cols-2 gap-4">
                         ${product.features.map(feature => `
                             <div class="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
@@ -775,10 +1133,9 @@ function renderProductDetails() {
             </div>
         </div>
 
-        <!-- Zoom Modal -->
         ${details.zoom ? `
             <div class="fixed inset-0 z-[100] bg-white flex items-center justify-center p-4 cursor-zoom-out animate-fade-in" onclick="app.updateDetail('zoom', false)">
-                <img src="${product.image}" alt="${product.name}" class="max-w-full max-h-full object-contain shadow-2xl" />
+                <img src="${currentImage}" alt="${product.name}" class="max-w-full max-h-full object-contain shadow-2xl" />
                 <button class="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors">
                     ${ICONS.zoomOut}
                 </button>
@@ -863,12 +1220,392 @@ function renderCartDrawer() {
                             <span>₹${total.toLocaleString()}</span>
                         </div>
                     </div>
-                    <button class="w-full py-4 bg-[#FF6B35] text-white font-bold rounded-xl hover:bg-[#e55a2b] transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0">
-                        Checkout Securely
+                    <button onclick="app.toggleCheckoutModal(true)" class="w-full py-4 bg-[#FF6B35] text-white font-bold rounded-xl hover:bg-[#e55a2b] transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0">
+                        Proceed to Checkout
                     </button>
                 </div>
             ` : ''}
         </div>
+    </div>
+    `;
+}
+
+function renderCheckoutModal() {
+    if (!state.checkoutModalOpen) return '';
+    const total = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    return `
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onclick="app.toggleCheckoutModal(false)"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in">
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="text-xl font-bold text-gray-900">Secure Checkout</h3>
+                <button onclick="app.toggleCheckoutModal(false)" class="text-gray-400 hover:text-gray-600">
+                    ${ICONS.close}
+                </button>
+            </div>
+            
+            <form onsubmit="app.confirmOrder(event)" class="p-6 space-y-5">
+                <!-- User Details Preview -->
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-100 text-sm text-gray-700">
+                    <p class="font-bold mb-1">Customer Details</p>
+                    <p>${state.user ? state.user.name : 'Guest User'}</p>
+                    <p class="text-gray-500">${state.user ? state.user.email : 'guest@example.com'}</p>
+                </div>
+
+                <!-- Branch Selection -->
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Select Nearest Branch</label>
+                    <div class="relative">
+                        <select name="branch" required class="w-full appearance-none px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF6B35] focus:border-transparent outline-none bg-white text-gray-700">
+                            <option value="">-- Choose Branch --</option>
+                            ${BRANCHES.map(b => `<option value="${b}">${b}</option>`).join('')}
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500">
+                            ${ICONS.chevronDown}
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Your order will be fulfilled by this branch.</p>
+                </div>
+
+                <div class="flex justify-between items-center pt-4 border-t border-dashed border-gray-200">
+                    <span class="text-gray-600 font-medium">Total Amount</span>
+                    <span class="text-2xl font-bold text-gray-900">₹${total.toLocaleString()}</span>
+                </div>
+
+                <button type="submit" class="w-full py-4 bg-[#FF6B35] text-white font-bold rounded-lg hover:bg-[#e55a2b] transition-all shadow-md hover:shadow-lg transform active:scale-[0.98] flex justify-center items-center gap-2">
+                    Confirm Order ${ICONS.check}
+                </button>
+            </form>
+        </div>
+    </div>
+    `;
+}
+
+function renderTrackingPage() {
+    return `
+    <section class="min-h-screen bg-gray-50 py-12 px-4 md:px-6 animate-fade-in">
+        <div class="max-w-3xl mx-auto">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 mb-8 text-center">
+                <h2 class="text-3xl font-bold text-gray-900 mb-4">Track Your Order</h2>
+                <p class="text-gray-500 mb-6">Enter your Order ID to check the current status.</p>
+                
+                <div class="flex gap-2 max-w-md mx-auto">
+                    <input type="text" id="trackInput" placeholder="e.g. SS-2025-4821" class="flex-1 border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#FF6B35] outline-none" onkeypress="if(event.key === 'Enter') app.trackOrder()" />
+                    <button onclick="app.trackOrder()" class="bg-[#FF6B35] text-white px-6 py-3 rounded-lg font-bold hover:bg-[#e55a2b]">Track</button>
+                </div>
+                <div id="trackResult"></div>
+            </div>
+        </div>
+    </section>
+    `;
+}
+
+function renderAdminLogin() {
+    const isLogin = state.adminAuthMode === 'login';
+    return `
+    <div class="min-h-screen bg-gray-100 flex items-center justify-center px-4">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md animate-fade-in">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-gray-900 text-[#FF6B35] rounded-full mx-auto flex items-center justify-center mb-4">
+                    ${ICONS.logoMoon}
+                </div>
+                <h2 class="text-2xl font-bold text-gray-900">Admin Portal</h2>
+                <p class="text-gray-500 text-sm">${isLogin ? 'Authorized personnel only' : 'Request Admin Access'}</p>
+            </div>
+            
+            <form onsubmit="${isLogin ? 'app.adminLogin(event)' : 'app.registerAdmin(event)'}" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">Username</label>
+                    <input type="text" name="username" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#FF6B35] outline-none" required />
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">Password</label>
+                    <input type="password" name="password" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#FF6B35] outline-none" required />
+                </div>
+                ${!isLogin ? `
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">Confirm Password</label>
+                        <input type="password" name="confirmPassword" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#FF6B35] outline-none" required />
+                    </div>
+                ` : ''}
+                <button type="submit" class="w-full bg-[#FF6B35] text-white py-3 rounded-lg font-bold hover:bg-[#e55a2b] shadow-lg">
+                    ${isLogin ? 'Login' : 'Submit Request'}
+                </button>
+            </form>
+
+            <div class="mt-6 text-center text-sm">
+                ${isLogin ? `
+                    <p class="text-gray-500">Don't have an account? 
+                        <button onclick="app.toggleAdminAuthMode('register')" class="text-[#FF6B35] font-bold hover:underline">Apply for Access</button>
+                    </p>
+                ` : `
+                    <p class="text-gray-500">Already have an account? 
+                        <button onclick="app.toggleAdminAuthMode('login')" class="text-[#FF6B35] font-bold hover:underline">Login</button>
+                    </p>
+                `}
+                <div class="mt-4 pt-4 border-t border-gray-100">
+                    <button onclick="app.goHome()" class="text-gray-500 hover:text-gray-900">Back to Store</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+}
+
+function renderAdminDashboard() {
+    const totalOrders = state.adminOrders.length;
+    const totalSales = state.adminOrders.reduce((acc, order) => acc + order.total, 0);
+    const isSuper = state.adminUser && state.adminUser.role === 'super';
+
+    // Admin Approvals Logic
+    const allAdmins = JSON.parse(localStorage.getItem('sleepSoundAdmins') || '[]');
+    const pendingAdmins = allAdmins.filter(a => a.status === 'pending');
+
+    // Calculate Branch Stats
+    const branchStats = {};
+    BRANCHES.forEach(b => branchStats[b] = { count: 0, sales: 0 });
+    state.adminOrders.forEach(order => {
+        if (branchStats[order.branch]) {
+            branchStats[order.branch].count++;
+            branchStats[order.branch].sales += order.total;
+        }
+    });
+
+    return `
+    <div class="min-h-screen bg-gray-100 flex font-sans">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-gray-900 text-white flex-shrink-0 hidden md:flex flex-col">
+            <div class="p-6 border-b border-gray-800 flex items-center gap-3">
+                <div class="w-8 h-8 text-[#FF6B35]">${ICONS.logoMoon}</div>
+                <span class="font-bold text-lg tracking-tight">Admin Panel</span>
+            </div>
+            <nav class="flex-1 p-4 space-y-2">
+                <button class="w-full text-left px-4 py-3 rounded bg-[#FF6B35] text-white font-medium">Dashboard</button>
+                <button onclick="app.goHome()" class="w-full text-left px-4 py-3 rounded text-gray-400 hover:bg-gray-800 hover:text-white transition-colors">View Store</button>
+                <button onclick="app.logout()" class="w-full text-left px-4 py-3 rounded text-gray-400 hover:bg-gray-800 hover:text-white transition-colors">Logout</button>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto">
+            <header class="bg-white border-b border-gray-200 p-6 flex justify-between items-center sticky top-0 z-20">
+                <h1 class="text-2xl font-bold text-gray-900">Dashboard Overview</h1>
+                <div class="md:hidden">
+                    <button onclick="app.logout()" class="text-sm text-red-500 font-bold">Logout</button>
+                </div>
+            </header>
+            
+            <div class="p-6 md:p-8 space-y-8">
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                        <p class="text-sm text-gray-500 font-bold uppercase">Total Sales</p>
+                        <p class="text-3xl font-bold text-gray-900 mt-2">₹${totalSales.toLocaleString()}</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                        <p class="text-sm text-gray-500 font-bold uppercase">Total Orders</p>
+                        <p class="text-3xl font-bold text-gray-900 mt-2">${totalOrders}</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                        <p class="text-sm text-gray-500 font-bold uppercase">Average Order Value</p>
+                        <p class="text-3xl font-bold text-gray-900 mt-2">₹${totalOrders ? Math.round(totalSales / totalOrders).toLocaleString() : 0}</p>
+                    </div>
+                </div>
+
+                ${isSuper && pendingAdmins.length > 0 ? `
+                    <!-- Pending Admin Approvals -->
+                    <div class="bg-white rounded-xl shadow-sm border border-red-200 overflow-hidden">
+                        <div class="p-6 border-b border-red-100 bg-red-50">
+                            <h3 class="font-bold text-lg text-red-900">Pending Admin Approvals</h3>
+                            <p class="text-sm text-red-700">Action required: Approve or reject new admin requests.</p>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+                                    <tr>
+                                        <th class="px-6 py-4">Username</th>
+                                        <th class="px-6 py-4">Request Date</th>
+                                        <th class="px-6 py-4">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 text-sm">
+                                    ${pendingAdmins.map(a => `
+                                        <tr>
+                                            <td class="px-6 py-4 font-bold text-gray-900">${a.username}</td>
+                                            <td class="px-6 py-4 text-gray-500">${new Date(a.id).toLocaleDateString()}</td>
+                                            <td class="px-6 py-4 flex gap-2">
+                                                <button onclick="app.approveAdmin(${a.id})" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700">Approve</button>
+                                                <button onclick="app.rejectAdmin(${a.id})" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">Reject</button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- Admin Account Management -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                        <h3 class="font-bold text-lg text-gray-900">Admin Account Management</h3>
+                        <span class="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">Total: ${allAdmins.length}</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+                                <tr>
+                                    <th class="px-6 py-4">Username</th>
+                                    <th class="px-6 py-4">Role</th>
+                                    <th class="px-6 py-4">Status</th>
+                                    <th class="px-6 py-4">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 text-sm">
+                                ${allAdmins.map(admin => {
+                                    // Check if this admin is the MAIN admin
+                                    const isMain = admin.username === 'admin' || admin.isMain === true;
+                                    const isSelf = state.adminUser && state.adminUser.id === admin.id;
+                                    
+                                    return `
+                                        <tr>
+                                            <td class="px-6 py-4 font-bold text-gray-900 flex items-center gap-2">
+                                                ${admin.username}
+                                                ${isMain ? '<span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full uppercase tracking-wider">Main</span>' : ''}
+                                                ${isSelf ? '<span class="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full uppercase tracking-wider">You</span>' : ''}
+                                            </td>
+                                            <td class="px-6 py-4 text-gray-500 capitalize">${admin.role || 'Admin'}</td>
+                                            <td class="px-6 py-4">
+                                                <span class="px-2 py-1 rounded text-xs font-bold ${admin.status === 'approved' ? 'bg-green-100 text-green-700' : admin.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}">
+                                                    ${admin.status}
+                                                </span>
+                                            </td>
+                                            <td class="px-6 py-4">
+                                                ${isMain ? 
+                                                    '<span class="text-gray-400 text-xs italic">Protected</span>' : 
+                                                    `<button onclick="app.removeAdmin(${admin.id})" class="text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1.5 rounded transition-colors text-xs font-bold border border-red-200">Remove</button>`
+                                                }
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Branch Stats -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100">
+                        <h3 class="font-bold text-lg text-gray-900">Sales by Branch</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+                                <tr>
+                                    <th class="px-6 py-4">Branch</th>
+                                    <th class="px-6 py-4">Orders</th>
+                                    <th class="px-6 py-4">Sales</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 text-sm">
+                                ${BRANCHES.map(b => `
+                                    <tr>
+                                        <td class="px-6 py-4 font-medium text-gray-900">${b}</td>
+                                        <td class="px-6 py-4">${branchStats[b].count}</td>
+                                        <td class="px-6 py-4 font-bold">₹${branchStats[b].sales.toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Orders List -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100">
+                        <h3 class="font-bold text-lg text-gray-900">Recent Orders</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+                                <tr>
+                                    <th class="px-6 py-4">Order ID</th>
+                                    <th class="px-6 py-4">Customer</th>
+                                    <th class="px-6 py-4">Branch</th>
+                                    <th class="px-6 py-4">Total</th>
+                                    <th class="px-6 py-4">Status</th>
+                                    <th class="px-6 py-4">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 text-sm">
+                                ${state.adminOrders.map(order => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 font-medium">${order.id}</td>
+                                        <td class="px-6 py-4">
+                                            <div class="font-medium text-gray-900">${order.customer.name}</div>
+                                            <div class="text-gray-500 text-xs">${order.customer.email}</div>
+                                        </td>
+                                        <td class="px-6 py-4">${order.branch}</td>
+                                        <td class="px-6 py-4 font-bold">₹${order.total.toLocaleString()}</td>
+                                        <td class="px-6 py-4">
+                                            <span class="px-2 py-1 rounded text-xs font-bold 
+                                            ${order.status === 'Delivered' ? 'bg-green-100 text-green-700' :
+            order.status === 'Out for Delivery' ? 'bg-blue-100 text-blue-700' :
+                order.status === 'Packed' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'}">
+                                                ${order.status}
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <select onchange="app.updateOrderStatus('${order.id}', this.value)" class="border border-gray-300 rounded text-xs p-1">
+                                                <option value="Order Placed" ${order.status === 'Order Placed' ? 'selected' : ''}>Placed</option>
+                                                <option value="Packed" ${order.status === 'Packed' ? 'selected' : ''}>Packed</option>
+                                                <option value="Out for Delivery" ${order.status === 'Out for Delivery' ? 'selected' : ''}>Out for Delivery</option>
+                                                <option value="Delivered" ${order.status === 'Delivered' ? 'selected' : ''}>Delivered</option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Product Price Editor -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100">
+                        <h3 class="font-bold text-lg text-gray-900">Product Price Management</h3>
+                    </div>
+                    <div class="overflow-x-auto max-h-96">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+                                <tr>
+                                    <th class="px-6 py-4">Product Name</th>
+                                    <th class="px-6 py-4">Category</th>
+                                    <th class="px-6 py-4">Current Price (₹)</th>
+                                    <th class="px-6 py-4">Update Price</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 text-sm">
+                                ${PRODUCTS.map(p => `
+                                    <tr>
+                                        <td class="px-6 py-4 font-medium text-gray-900">${p.name}</td>
+                                        <td class="px-6 py-4 text-gray-500">${p.category}</td>
+                                        <td class="px-6 py-4 font-bold text-gray-900">₹${p.price.toLocaleString()}</td>
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-2">
+                                                <input type="number" id="price-${p.id}" value="${p.price}" class="w-24 border border-gray-300 rounded px-2 py-1 text-sm" />
+                                                <button onclick="app.savePrice(${p.id}, document.getElementById('price-${p.id}').value)" class="bg-gray-900 text-white px-3 py-1 rounded text-xs hover:bg-black">Save</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
     `;
 }
@@ -908,6 +1645,8 @@ function renderCategoryModal() {
 
 function renderAuthModal() {
     if (!state.authModalOpen) return '';
+    const isLogin = state.authMode === 'login';
+
     return `
     <div class="fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onclick="app.toggleAuth(false)"></div>
@@ -915,65 +1654,44 @@ function renderAuthModal() {
             <div class="p-8">
                 <div class="flex justify-between items-center mb-6">
                     <div>
-                        <h3 class="text-2xl font-bold text-gray-900">Welcome Back</h3>
-                        <p class="text-sm text-gray-500 mt-1">Please enter your details to sign in.</p>
+                        <h3 class="text-2xl font-bold text-gray-900">${isLogin ? 'Welcome Back' : 'Create Account'}</h3>
+                        <p class="text-sm text-gray-500 mt-1">${isLogin ? 'Please enter your details to sign in.' : 'Register to start shopping.'}</p>
                     </div>
                     <button onclick="app.toggleAuth(false)" class="text-gray-400 hover:text-gray-600 -mt-6 -mr-2 p-2">${ICONS.close}</button>
                 </div>
                 
-                <form onsubmit="app.login(event)" class="space-y-5">
+                <form onsubmit="${isLogin ? 'app.login(event)' : 'app.registerUser(event)'}" class="space-y-5">
+                    ${!isLogin ? `
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Full Name</label>
+                            <input type="text" name="name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF6B35] focus:border-transparent outline-none transition-all" placeholder="John Doe" />
+                        </div>
+                    ` : ''}
                     <div>
                         <label class="block text-sm font-bold text-gray-700 mb-1">Email Address</label>
-                        <input type="email" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF6B35] focus:border-transparent outline-none transition-all" placeholder="user@example.com" />
+                        <input type="email" name="email" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF6B35] focus:border-transparent outline-none transition-all" placeholder="user@example.com" />
                     </div>
                     <div>
                         <label class="block text-sm font-bold text-gray-700 mb-1">Password</label>
-                        <input type="password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF6B35] focus:border-transparent outline-none transition-all" placeholder="••••••••" />
+                        <input type="password" name="password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF6B35] focus:border-transparent outline-none transition-all" placeholder="••••••••" />
                     </div>
-                    <button type="submit" class="w-full py-4 bg-[#FF6B35] text-white font-bold rounded-lg hover:bg-[#e55a2b] transition-all shadow-md hover:shadow-lg transform active:scale-[0.98]">Sign In</button>
+                    ${!isLogin ? `
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Confirm Password</label>
+                            <input type="password" name="confirmPassword" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF6B35] focus:border-transparent outline-none transition-all" placeholder="••••••••" />
+                        </div>
+                    ` : ''}
+                    <button type="submit" class="w-full py-4 bg-[#FF6B35] text-white font-bold rounded-lg hover:bg-[#e55a2b] transition-all shadow-md hover:shadow-lg transform active:scale-[0.98]">${isLogin ? 'Sign In' : 'Register'}</button>
                 </form>
                 
                 <div class="mt-6 text-center pt-6 border-t border-gray-100">
-                    <p class="text-sm text-gray-600">Don't have an account? <button class="text-[#FF6B35] font-bold hover:underline">Create Account</button></p>
+                    <p class="text-sm text-gray-600">
+                        ${isLogin ? "Don't have an account?" : "Already have an account?"} 
+                        <button onclick="app.toggleAuth(true, '${isLogin ? 'register' : 'login'}')" class="text-[#FF6B35] font-bold hover:underline">
+                            ${isLogin ? 'Create Account' : 'Login'}
+                        </button>
+                    </p>
                 </div>
-            </div>
-        </div>
-    </div>
-    `;
-}
-
-function renderSizeConverterModal() {
-    if (!state.sizeConverterOpen) return '';
-    return `
-    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="app.toggleSizeConverter(false)"></div>
-        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in p-6">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-bold text-gray-900">Size Calculator</h3>
-                <button onclick="app.toggleSizeConverter(false)" class="text-gray-400 hover:text-gray-600">${ICONS.close}</button>
-            </div>
-            
-            <div class="space-y-4">
-                <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase">Input Length (Inches)</label>
-                    <input id="calcLen" type="number" class="w-full border border-gray-300 rounded-lg p-2 mt-1 focus:border-[#FF6B35] outline-none" placeholder="e.g. 72">
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase">Input Width (Inches)</label>
-                    <input id="calcWid" type="number" class="w-full border border-gray-300 rounded-lg p-2 mt-1 focus:border-[#FF6B35] outline-none" placeholder="e.g. 36">
-                </div>
-                
-                <button onclick="(() => {
-                    const l = document.getElementById('calcLen').value;
-                    const w = document.getElementById('calcWid').value;
-                    if(l && w) {
-                        const ft = (l/12).toFixed(1) + 'ft x ' + (w/12).toFixed(1) + 'ft';
-                        const cm = (l*2.54).toFixed(0) + 'cm x ' + (w*2.54).toFixed(0) + 'cm';
-                        document.getElementById('calcRes').innerHTML = '<div class=\'bg-orange-50 p-3 rounded border border-orange-100 text-center\'><div class=\'font-bold text-gray-900\'>'+ft+'</div><div class=\'text-sm text-gray-600\'>'+cm+'</div></div>';
-                    }
-                })()" class="w-full bg-gray-900 text-white py-2 rounded-lg font-bold hover:bg-gray-800">Convert</button>
-
-                <div id="calcRes" class="mt-4"></div>
             </div>
         </div>
     </div>
@@ -1009,10 +1727,10 @@ function renderFooter() {
                 <div>
                     <h4 class="text-white font-bold mb-6">Support</h4>
                     <ul class="space-y-3 text-sm">
-                        <li><a href="#" class="hover:text-[#FF6B35] transition-colors">Track Order</a></li>
+                        <li><a onclick="app.goToTracking()" class="cursor-pointer hover:text-[#FF6B35] transition-colors">Track Order</a></li>
                         <li><a href="#" class="hover:text-[#FF6B35] transition-colors">Warranty Policy</a></li>
                         <li><a href="#" class="hover:text-[#FF6B35] transition-colors">Return & Refund</a></li>
-                        <li><a href="#" class="hover:text-[#FF6B35] transition-colors">Contact Us</a></li>
+                        <li><a onclick="app.goToAdmin()" class="cursor-pointer hover:text-gray-200 transition-colors text-gray-600">Admin Login</a></li>
                     </ul>
                 </div>
                 <div>
@@ -1062,8 +1780,15 @@ const root = document.getElementById('root');
 let intervalId = null;
 
 function render() {
-    // Manage Slider Interval
-    if (state.currentProduct || state.selectedCategory || state.searchQuery) {
+    // Stop Slider on specific views / when login is open
+    if (
+        state.currentProduct ||
+        state.selectedCategory ||
+        state.searchQuery ||
+        state.view !== 'home' ||
+        state.authModalOpen ||
+        state.view === 'adminLogin'
+    ) {
         if (intervalId) { clearInterval(intervalId); intervalId = null; }
     } else {
         if (!intervalId) {
@@ -1074,9 +1799,22 @@ function render() {
         }
     }
 
+    // Routing Logic
+    if (state.view === 'adminLogin') {
+        root.innerHTML = renderAdminLogin();
+        return;
+    }
+
+    if (state.view === 'admin') {
+        root.innerHTML = renderAdminDashboard();
+        return;
+    }
+
     let mainContent = '';
 
-    if (state.currentProduct) {
+    if (state.view === 'tracking') {
+        mainContent = renderTrackingPage();
+    } else if (state.currentProduct) {
         mainContent = renderProductDetails();
     } else {
         const heroSection = (!state.selectedCategory && !state.searchQuery) ? renderHero() : '';
@@ -1096,15 +1834,15 @@ function render() {
         <main>${mainContent}</main>
         ${renderFooter()}
         ${renderCartDrawer()}
+        ${renderCheckoutModal()}
         ${renderAuthModal()}
         ${renderCategoryModal()}
-        ${renderSizeConverterModal()}
     `;
 }
 
 // Expose app to window for inline event handlers
 window.app = app;
-window.PRODUCTS = PRODUCTS; // Exposed for ease of debug if needed
+window.PRODUCTS = PRODUCTS;
 
 // Start App
 initApp();

@@ -1,8 +1,3 @@
-/**
- * DATA & CONSTANTS
- * Separated for cleaner code structure.
- */
-
 const ICONS = {
     search: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>`,
     store: `<svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>`,
@@ -17,9 +12,13 @@ const ICONS = {
     feature: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`,
     heart: `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>`,
     zoomOut: `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>`,
+    lock: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>`,
+    user: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>`,
     // New Minimal Logo Icon
     logoMoon: `<svg class="w-full h-full text-[#FF6B35]" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>`
 };
+
+const BRANCHES = ["Mumbai HQ", "Andheri", "Mira Road", "Thane", "Navi Mumbai", "Pune", "Delhi"];
 
 const NAV_ITEMS = [
     {
@@ -119,20 +118,237 @@ const NAV_ITEMS = [
     }
 ];
 
-const PRODUCTS = [
-    { id: 1, name: "Ortho Memory Foam Mattress", category: "Mattress", subCategory: "Orthopedic Mattress", price: 12999, displayPrice: "₹12,999", originalPrice: "₹19,999", image: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=800&h=600", description: "Medium firm, orthopedic support for back pain relief.", badge: "Bestseller", sku: "M72364", features: ["Orthopedic Support", "Memory Foam", "Medium Firm", "100 Night Trial"] },
-    { id: 2, name: "Solid Wood Bed Frame", category: "Bedroom", subCategory: "Sheesham Wood Beds", price: 25999, displayPrice: "₹25,999", originalPrice: "₹35,999", image: "https://images.unsplash.com/photo-1505693416388-b0346efee535?auto=format&fit=crop&q=80&w=800&h=600", description: "Queen size with storage, made of premium Sheesham wood.", badge: "New", sku: "B72364", features: ["Solid Wood", "Storage Space", "Queen Size", "10 Year Warranty"] },
-    { id: 3, name: "Ergonomic Office Chair", category: "Office", subCategory: "Ergonomic Chairs", price: 8999, displayPrice: "₹8,999", originalPrice: "₹12,999", image: "https://images.unsplash.com/photo-1586953208448-b95a79798f07?auto=format&fit=crop&q=80&w=800&h=600", description: "Lumbar support, adjustable height, and breathable mesh.", badge: "Sale", sku: "C72364", features: ["Lumbar Support", "Adjustable Height", "Ergonomic Design", "5 Year Warranty"] },
-    { id: 4, name: "Modular Sofa Set", category: "Living", subCategory: "L Shape Sofas", price: 34999, displayPrice: "₹34,999", originalPrice: "₹49,999", image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800&h=600", description: "3-seater with removable covers and premium fabric.", badge: "Popular", sku: "S72364", features: ["Modular Design", "Removable Covers", "3-Seater", "Premium Fabric"] },
-    { id: 5, name: "Dining Table Set", category: "Dining", subCategory: "4 Seater Dining Sets", price: 19999, displayPrice: "₹19,999", originalPrice: "₹29,999", image: "https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&q=80&w=800&h=600", description: "4-seater solid wood dining set with cushioned chairs.", badge: null, sku: "D72364", features: ["Solid Wood", "4-Seater", "Durable Finish", "Easy Assembly"] },
-    { id: 6, name: "Study Desk", category: "Office", subCategory: "Study Tables", price: 7999, displayPrice: "₹7,999", originalPrice: "₹11,999", image: "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&q=80&w=800&h=600", description: "Minimalist design with drawers for home office.", badge: null, sku: "SD72364", features: ["Minimalist Design", "Storage Drawers", "Cable Management", "Modern Style"] },
-    { id: 7, name: "Dual Comfort Mattress", category: "Mattress", subCategory: "Dual Comfort Mattress", price: 6500, displayPrice: "₹6,500", originalPrice: "₹8,000", image: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=800&h=600", description: "Hard on one side, soft on the other. Usable on both sides.", badge: "Trending", sku: "DC72364", features: ["Dual Comfort", "Reversible", "High Density Foam", "7 Year Warranty"] },
-    { id: 8, name: "Teak Wood Bedside Table", category: "Bedroom", subCategory: "Bedside Tables", price: 4500, displayPrice: "₹4,500", originalPrice: "₹6,000", image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&q=80&w=800&h=600", description: "Compact bedside table with single drawer storage.", badge: null, sku: "BT72364", features: ["Teak Wood", "Compact", "Pre-assembled", "Classic Finish"] },
-    { id: 9, name: "Recliner Sofa 1 Seater", category: "Living", subCategory: "Recliners", price: 15999, displayPrice: "₹15,999", originalPrice: "₹22,999", image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800&h=600", description: "Single seater manual recliner with plush cushioning.", badge: "Comfort", sku: "RC72364", features: ["Manual Recline", "High Back", "Arm Support", "Velvet Fabric"] },
-    { id: 10, name: "Bookshelf with Glass Doors", category: "Office", subCategory: "Bookshelves", price: 11000, displayPrice: "₹11,000", originalPrice: "₹16,000", image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&q=80&w=800&h=600", description: "Spacious bookshelf with glass doors for dust protection.", badge: null, sku: "BS72364", features: ["Glass Doors", "Multiple Shelves", "Engineered Wood", "Walnut Finish"] },
-    { id: 11, name: "Latex Mattress", category: "Mattress", subCategory: "Latex Mattress", price: 18000, displayPrice: "₹18,000", originalPrice: "₹25,000", image: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=800&h=600", description: "Natural latex layers for breathable and bouncy support.", badge: "Premium", sku: "LM72364", features: ["Natural Latex", "Breathable", "Hypoallergenic", "10 Year Warranty"] },
-    { id: 12, name: "Shoe Rack 4 Layer", category: "Living", subCategory: "Shoe Racks", price: 5500, displayPrice: "₹5,500", originalPrice: "₹7,500", image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&q=80&w=800&h=600", description: "Engineered wood shoe rack with ventilation.", badge: null, sku: "SR72364", features: ["Ventilation Cuts", "4 Shelves", "Compact Depth", "Dark Walnut"] }
+// Helper images for gallery population
+const IMAGES = {
+    mattress: [
+        "https://images.unsplash.com/photo-1505693416388-b0346efee535?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1631049552057-403cdb8f0658?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1505693314120-0d443867891c?auto=format&fit=crop&q=80&w=800&h=600"
+    ],
+    bedroom: [
+        "https://images.unsplash.com/photo-1560185127-6ed189bf02f4?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1617104678098-de229db51175?auto=format&fit=crop&q=80&w=800&h=600"
+    ],
+    living: [
+        "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1567016432779-094069958ea5?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1540574163026-643ea20ade25?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1550581190-9c1c48d21d6c?auto=format&fit=crop&q=80&w=800&h=600"
+    ],
+    dining: [
+        "https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1560185007-cde436f6a4d0?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&q=80&w=800&h=600"
+    ],
+    office: [
+        "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1596920617916-67b2e014eb7a?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1595428774223-ef52b5f3d7d9?auto=format&fit=crop&q=80&w=800&h=600"
+    ],
+    chair: [
+        "https://images.unsplash.com/photo-1503602642458-232111445657?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1580480055273-228ff5388ef8?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1592078615290-033ee584e267?auto=format&fit=crop&q=80&w=800&h=600"
+    ],
+    storage: [
+        "https://images.unsplash.com/photo-1595428774223-ef52b5f3d7d9?auto=format&fit=crop&q=80&w=800&h=600",
+        "https://images.unsplash.com/photo-1588471980726-8346cb477a33?auto=format&fit=crop&q=80&w=800&h=600"
+    ]
+};
+
+// INITIAL PRODUCTS
+const DEFAULT_PRODUCTS = [
+    { 
+        id: 1, 
+        name: "Ortho Memory Foam Mattress", 
+        category: "Mattress", 
+        subCategory: "Orthopedic Mattress", 
+        price: 12999, 
+        displayPrice: "₹12,999", 
+        originalPrice: "₹19,999", 
+        image: IMAGES.mattress[0], 
+        images: IMAGES.mattress,
+        description: "Medium firm, orthopedic support for back pain relief.", 
+        badge: "Bestseller", 
+        sku: "M72364", 
+        features: ["Orthopedic Support", "Memory Foam", "Medium Firm", "100 Night Trial"] 
+    },
+    { 
+        id: 2, 
+        name: "Solid Wood Bed Frame", 
+        category: "Bedroom", 
+        subCategory: "Sheesham Wood Beds", 
+        price: 25999, 
+        displayPrice: "₹25,999", 
+        originalPrice: "₹35,999", 
+        image: IMAGES.bedroom[0], 
+        images: IMAGES.bedroom,
+        description: "Queen size with storage, made of premium Sheesham wood.", 
+        badge: "New", 
+        sku: "B72364", 
+        features: ["Solid Wood", "Storage Space", "Queen Size", "10 Year Warranty"] 
+    },
+    { 
+        id: 3, 
+        name: "Ergonomic Office Chair", 
+        category: "Office", 
+        subCategory: "Ergonomic Chairs", 
+        price: 8999, 
+        displayPrice: "₹8,999", 
+        originalPrice: "₹12,999", 
+        image: IMAGES.chair[0], 
+        images: IMAGES.chair,
+        description: "Lumbar support, adjustable height, and breathable mesh.", 
+        badge: "Sale", 
+        sku: "C72364", 
+        features: ["Lumbar Support", "Adjustable Height", "Ergonomic Design", "5 Year Warranty"] 
+    },
+    { 
+        id: 4, 
+        name: "Modular Sofa Set", 
+        category: "Living", 
+        subCategory: "L Shape Sofas", 
+        price: 34999, 
+        displayPrice: "₹34,999", 
+        originalPrice: "₹49,999", 
+        image: IMAGES.living[0], 
+        images: IMAGES.living,
+        description: "3-seater with removable covers and premium fabric.", 
+        badge: "Popular", 
+        sku: "S72364", 
+        features: ["Modular Design", "Removable Covers", "3-Seater", "Premium Fabric"] 
+    },
+    { 
+        id: 5, 
+        name: "Dining Table Set", 
+        category: "Dining", 
+        subCategory: "4 Seater Dining Sets", 
+        price: 19999, 
+        displayPrice: "₹19,999", 
+        originalPrice: "₹29,999", 
+        image: IMAGES.dining[0], 
+        images: IMAGES.dining,
+        description: "4-seater solid wood dining set with cushioned chairs.", 
+        badge: null, 
+        sku: "D72364", 
+        features: ["Solid Wood", "4-Seater", "Durable Finish", "Easy Assembly"] 
+    },
+    { 
+        id: 6, 
+        name: "Study Desk", 
+        category: "Office", 
+        subCategory: "Study Tables", 
+        price: 7999, 
+        displayPrice: "₹7,999", 
+        originalPrice: "₹11,999", 
+        image: IMAGES.office[0], 
+        images: IMAGES.office,
+        description: "Minimalist design with drawers for home office.", 
+        badge: null, 
+        sku: "SD72364", 
+        features: ["Minimalist Design", "Storage Drawers", "Cable Management", "Modern Style"] 
+    },
+    { 
+        id: 7, 
+        name: "Dual Comfort Mattress", 
+        category: "Mattress", 
+        subCategory: "Dual Comfort Mattress", 
+        price: 6500, 
+        displayPrice: "₹6,500", 
+        originalPrice: "₹8,000", 
+        image: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=800&h=600", 
+        images: [
+            "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=800&h=600",
+            "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&q=80&w=800&h=600"
+        ],
+        description: "Hard on one side, soft on the other. Usable on both sides.", 
+        badge: "Trending", 
+        sku: "DC72364", 
+        features: ["Dual Comfort", "Reversible", "High Density Foam", "7 Year Warranty"] 
+    },
+    { 
+        id: 8, 
+        name: "Teak Wood Bedside Table", 
+        category: "Bedroom", 
+        subCategory: "Bedside Tables", 
+        price: 4500, 
+        displayPrice: "₹4,500", 
+        originalPrice: "₹6,000", 
+        image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&q=80&w=800&h=600", 
+        images: IMAGES.storage,
+        description: "Compact bedside table with single drawer storage.", 
+        badge: null, 
+        sku: "BT72364", 
+        features: ["Teak Wood", "Compact", "Pre-assembled", "Classic Finish"] 
+    },
+    { 
+        id: 9, 
+        name: "Recliner Sofa 1 Seater", 
+        category: "Living", 
+        subCategory: "Recliners", 
+        price: 15999, 
+        displayPrice: "₹15,999", 
+        originalPrice: "₹22,999", 
+        image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800&h=600", 
+        images: IMAGES.living,
+        description: "Single seater manual recliner with plush cushioning.", 
+        badge: "Comfort", 
+        sku: "RC72364", 
+        features: ["Manual Recline", "High Back", "Arm Support", "Velvet Fabric"] 
+    },
+    { 
+        id: 10, 
+        name: "Bookshelf with Glass Doors", 
+        category: "Office", 
+        subCategory: "Bookshelves", 
+        price: 11000, 
+        displayPrice: "₹11,000", 
+        originalPrice: "₹16,000", 
+        image: IMAGES.storage[0], 
+        images: IMAGES.storage,
+        description: "Spacious bookshelf with glass doors for dust protection.", 
+        badge: null, 
+        sku: "BS72364", 
+        features: ["Glass Doors", "Multiple Shelves", "Engineered Wood", "Walnut Finish"] 
+    },
+    { 
+        id: 11, 
+        name: "Latex Mattress", 
+        category: "Mattress", 
+        subCategory: "Latex Mattress", 
+        price: 18000, 
+        displayPrice: "₹18,000", 
+        originalPrice: "₹25,000", 
+        image: IMAGES.mattress[2], 
+        images: [IMAGES.mattress[2], IMAGES.mattress[0], IMAGES.mattress[1]],
+        description: "Natural latex layers for breathable and bouncy support.", 
+        badge: "Premium", 
+        sku: "LM72364", 
+        features: ["Natural Latex", "Breathable", "Hypoallergenic", "10 Year Warranty"] 
+    },
+    { 
+        id: 12, 
+        name: "Shoe Rack 4 Layer", 
+        category: "Living", 
+        subCategory: "Shoe Racks", 
+        price: 5500, 
+        displayPrice: "₹5,500", 
+        originalPrice: "₹7,500", 
+        image: IMAGES.storage[1], 
+        images: IMAGES.storage,
+        description: "Engineered wood shoe rack with ventilation.", 
+        badge: null, 
+        sku: "SR72364", 
+        features: ["Ventilation Cuts", "4 Shelves", "Compact Depth", "Dark Walnut"] 
+    }
 ];
+
+// Load products from LocalStorage to allow Admin price updates, or use default
+let storedProducts = localStorage.getItem('sleepSoundProducts');
+const PRODUCTS = storedProducts ? JSON.parse(storedProducts) : DEFAULT_PRODUCTS;
+
 
 const SLIDES = [
     {
